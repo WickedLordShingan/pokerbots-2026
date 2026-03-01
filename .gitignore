@@ -9,6 +9,6 @@ venv/
 .DS_Store
 
 # Logs
-logs/
-*.glog
-*.plog
+# logs/
+# *.glog
+# *.plog
