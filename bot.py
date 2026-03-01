@@ -402,36 +402,78 @@ class Player(BaseBot):
     # ---- Learned params ----
 
     def _load_learned_params(self):
+        """
+        Load trained parameters. Strategy:
+
+        1. BAKED-IN DEFAULTS (always active, even on competition server with no JSON):
+           These are values trained from real competition logs and hardcoded here.
+           Update these constants every time you run train_from_logs.py locally.
+
+        2. JSON OVERRIDE (if learned_params.json exists alongside bot.py):
+           If found, overrides the baked-in values. Useful for local testing
+           and for competitions that allow file submissions alongside bot.py.
+
+        This means the bot runs identically whether or not the JSON file is present.
+        TO UPDATE AFTER TRAINING: replace the _BAKED constants below with the
+        values printed by train_from_logs.py, then resubmit bot.py.
+        """
+
+        # ----------------------------------------------------------------
+        # BAKED-IN TRAINED VALUES — update these after each training run
+        # Format: replace with output from train_from_logs.py --verbose
+        # ----------------------------------------------------------------
+        _BAKED_BLUFF_PRIOR = 0.6846   # from learned_params.json opp_bluff_prior
+
+        # Calibrated personality priors from training (mu, sigma per feature).
+        # If you haven't trained yet, these are the theory-based defaults.
+        # After running train_from_logs.py, copy the "Calibrated prior means" output here.
+        _BAKED_PRIORS = {
+            COCKY:  {'vpip':(0.80,0.12),'aggression':(0.65,0.12),
+                     'fold_to_bet':(0.20,0.10),'auction_ratio':(0.22,0.10),'bet_sizing':(0.80,0.20)},
+            SAFE:   {'vpip':(0.30,0.10),'aggression':(0.25,0.10),
+                     'fold_to_bet':(0.65,0.12),'auction_ratio':(0.05,0.04),'bet_sizing':(0.45,0.15)},
+            LOSING: {'vpip':(0.60,0.18),'aggression':(0.50,0.20),
+                     'fold_to_bet':(0.40,0.18),'auction_ratio':(0.15,0.12),'bet_sizing':(0.65,0.30)},
+        }
+        # ----------------------------------------------------------------
+
+        # Apply baked-in priors as the baseline
+        PersonalityClassifier.PRIORS = _BAKED_PRIORS
+        bluff = _BAKED_BLUFF_PRIOR
+
+        # Attempt to load JSON — overrides baked values if present
         path = os.path.join(os.path.dirname(__file__), 'learned_params.json')
         try:
             with open(path) as f:
                 data = json.load(f)
+
+            json_bluff = float(data.get('opp_bluff_prior', bluff))
+            bluff = max(0.0, min(1.0, json_bluff))
+
+            cal     = data.get('calibrated_priors', {})
+            valid_l = {COCKY, SAFE, LOSING}
+            valid_f = {'vpip','aggression','fold_to_bet','auction_ratio','bet_sizing'}
+            if cal and set(cal.keys()) == valid_l:
+                new_p = {}
+                ok    = True
+                for lb, fm in cal.items():
+                    new_p[lb] = {}
+                    for feat, val in fm.items():
+                        if feat not in valid_f: continue
+                        if isinstance(val, (list, tuple)) and len(val) == 2:
+                            mu, sig = float(val[0]), float(val[1])
+                            if 0 <= mu <= 1 and 0.01 <= sig <= 1:
+                                new_p[lb][feat] = (mu, sig)
+                    for feat in valid_f:
+                        if feat not in new_p[lb]:
+                            new_p[lb][feat] = _BAKED_PRIORS[lb][feat]
+                    if len(new_p[lb]) != len(valid_f):
+                        ok = False; break
+                if ok:
+                    PersonalityClassifier.PRIORS = new_p
+
         except Exception:
-            return 0.20
-
-        bluff = max(0.0, min(1.0, float(data.get('opp_bluff_prior', 0.20))))
-
-        cal = data.get('calibrated_priors', {})
-        valid_l = {COCKY, SAFE, LOSING}
-        valid_f = {'vpip','aggression','fold_to_bet','auction_ratio','bet_sizing'}
-        if cal and set(cal.keys()) == valid_l:
-            new_p = {}
-            ok = True
-            for lb, fm in cal.items():
-                new_p[lb] = {}
-                for feat, val in fm.items():
-                    if feat not in valid_f: continue
-                    if isinstance(val,(list,tuple)) and len(val)==2:
-                        mu,sig = float(val[0]), float(val[1])
-                        if 0<=mu<=1 and 0.01<=sig<=1:
-                            new_p[lb][feat] = (mu,sig)
-                for feat in valid_f:
-                    if feat not in new_p[lb]:
-                        new_p[lb][feat] = PersonalityClassifier.PRIORS[lb][feat]
-                if len(new_p[lb]) != len(valid_f):
-                    ok = False; break
-            if ok:
-                PersonalityClassifier.PRIORS = new_p
+            pass  # JSON missing or malformed — baked values already applied above
 
         return bluff
 
