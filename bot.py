@@ -54,6 +54,8 @@ from pkbot.states import BIG_BLIND, SMALL_BLIND, STARTING_STACK
 
 import random
 import math
+import json
+import os
 
 # ---------------------------------------------------------------------------
 # Preflop equity lookup
@@ -711,12 +713,26 @@ class Player(BaseBot):
         # Long-run villain bluff tracking (from showdowns)
         self.opp_showdowns_seen = 0
         self.opp_bluffs_seen    = 0
-        self.opp_bluff_ratio    = 0.20  # prior: 20% of big pots are bluffs
+        # Default prior, optionally overridden by learned_params.json
+        self.opp_bluff_ratio    = self._load_bluff_prior(default=0.20)
 
         # Per-hand state
         self.opp_known_card  = None
         self.opp_auction_bid = None
         self.hand_state      = None
+
+    def _load_bluff_prior(self, default: float) -> float:
+        """
+        Load opp_bluff_prior from learned_params.json if present (offline training output).
+        """
+        path = os.path.join(os.path.dirname(__file__), "learned_params.json")
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            val = float(data.get("opp_bluff_prior", default))
+            return max(0.0, min(1.0, val))
+        except Exception:
+            return default
 
     # ------------------------------------------------------------------
     # Hand lifecycle
