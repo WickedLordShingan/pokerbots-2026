@@ -1,8 +1,9 @@
 PYTHON_CMD = "python"
+# PYTHON_CMD = "./venv/bin/python"
 # For linux and mac, the code python cmd is sometimes 'python3' instead of 'python'
 
 BOT_1_NAME = 'BotA'
-BOT_1_FILE = './example_bot.py'
+BOT_1_FILE = './bot.py'
 
 BOT_2_NAME = 'BotB'
 BOT_2_FILE= './example_bot.py'
